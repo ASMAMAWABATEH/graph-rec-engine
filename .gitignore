@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+.venv/
+
+# Data & results (local artifacts)
+data/raw/
+data/processed/
+results/
+
+# Jupyter
+.ipynb_checkpoints/
+
+*.pkl
+
+# OS
+.DS_Store

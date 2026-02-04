@@ -1,0 +1,3 @@
+min_session_length: 2
+min_item_freq: 5
+test_ratio: 0.2
