@@ -6,7 +6,8 @@ __pycache__/
 .env
 .venv/
 
-# Data & results (local artifacts)
+# Data & results
+data/batch.json
 data/raw/
 data/processed/
 results/
@@ -14,7 +15,11 @@ results/
 # Jupyter
 .ipynb_checkpoints/
 
+# Pickle files
 *.pkl
+
+# Logs
+*.log
 
 # OS
 .DS_Store
