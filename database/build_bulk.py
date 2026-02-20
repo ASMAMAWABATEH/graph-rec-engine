@@ -63,9 +63,10 @@ print(f"📊 CONTAINS: {len(contains)}")
 
 # ---- ITEMS ----
 with open(out / "items.csv", "w") as f:
-    f.write(":ID(Item)\t:LABEL\n")
-    for i in range(len(items_list)):
-        f.write(f"{i}\tItem\n")
+    # Add :item_id:int property for correct querying
+    f.write(":ID(Item)\t:item_id:int\t:LABEL\n")
+    for i, item_id in enumerate(items_list):
+        f.write(f"{i}\t{item_id}\tItem\n")
 
 # ---- SESSIONS ----
 with open(out / "sessions.csv", "w") as f:
