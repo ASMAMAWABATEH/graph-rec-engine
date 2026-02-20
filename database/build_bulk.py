@@ -3,8 +3,8 @@ from collections import defaultdict
 from pathlib import Path
 
 data_path = Path("data/batch.json")
-out = Path("import")
-out.mkdir(exist_ok=True)
+out = Path("data/neo4j_import")
+out.mkdir(parents=True, exist_ok=True)
 
 print("📦 Loading JSON...")
 data = json.load(data_path.open())
