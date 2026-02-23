@@ -11,18 +11,8 @@ from .metrics import (
     mrr_at_k,
     precision_at_k,
     recall_at_k,
+    ndcg_at_k
 )
-
-
-def ndcg_at_k(recommended: List[int], ground_truth: int, k: int = 10) -> float:
-    """
-    Normalized Discounted Cumulative Gain for a single ground-truth item.
-    Returns 1 / log2(rank + 1) if the item is present, else 0.
-    """
-    if ground_truth in recommended[:k]:
-        rank = recommended.index(ground_truth) + 1  # ranks start at 1
-        return 1.0 / math.log2(rank + 1)
-    return 0.0
 
 
 class Validator:
@@ -31,34 +21,57 @@ class Validator:
         self.top_k = top_k
         self.rec = Recommender(top_k=top_k)
 
-    def evaluate(self, sessions: List[List[int]]):
+    def evaluate_model(self, sessions: List[List[int]], model_name: str):
+        """Evaluate a single model on the test sessions"""
         hits, mrrs, precisions, recalls, ndcgs = [], [], [], [], []
+        per_session_results = []
 
-        for session in tqdm(sessions):
+        for session in tqdm(sessions, desc=f"Evaluating {model_name.upper()}"):
             if len(session) < 2:
                 continue
 
             input_seq = session[:-1]
             target = session[-1]
 
-            if self.model_name == "hsp":
-                recs = self.rec.hsp_predict(input_seq)
-            else:
-                recs = self.rec.ric_predict(input_seq)
+            recs = self.rec.hsp_predict(input_seq) if model_name == "hsp" else self.rec.ric_predict(input_seq)
 
-            hits.append(hit_rate_at_k(recs, target))
-            mrrs.append(mrr_at_k(recs, target))
-            precisions.append(precision_at_k(recs, target))
-            recalls.append(recall_at_k(recs, target))
-            ndcgs.append(ndcg_at_k(recs, target, k=self.top_k))
+            hit = hit_rate_at_k(recs, target)
+            mrr = mrr_at_k(recs, target)
+            precision = precision_at_k(recs, target)
+            recall = recall_at_k(recs, target)
+            ndcg = ndcg_at_k(recs, target, k=self.top_k)
 
-        return {
+            hits.append(hit)
+            mrrs.append(mrr)
+            precisions.append(precision)
+            recalls.append(recall)
+            ndcgs.append(ndcg)
+
+            per_session_results.append({
+                "hit": hit,
+                "mrr": mrr,
+                "precision": precision,
+                "recall": recall,
+                "ndcg": ndcg
+            })
+
+        micro_metrics = {
             "HitRate@K": sum(hits) / len(hits) if hits else 0.0,
             "MRR@K": sum(mrrs) / len(mrrs) if mrrs else 0.0,
             "Precision@K": sum(precisions) / len(precisions) if precisions else 0.0,
             "Recall@K": sum(recalls) / len(recalls) if recalls else 0.0,
             "nDCG@K": sum(ndcgs) / len(ndcgs) if ndcgs else 0.0,
         }
+
+        macro_metrics = {
+            "HitRate@K": sum(d["hit"] for d in per_session_results) / len(per_session_results) if per_session_results else 0.0,
+            "MRR@K": sum(d["mrr"] for d in per_session_results) / len(per_session_results) if per_session_results else 0.0,
+            "Precision@K": sum(d["precision"] for d in per_session_results) / len(per_session_results) if per_session_results else 0.0,
+            "Recall@K": sum(d["recall"] for d in per_session_results) / len(per_session_results) if per_session_results else 0.0,
+            "nDCG@K": sum(d["ndcg"] for d in per_session_results) / len(per_session_results) if per_session_results else 0.0,
+        }
+
+        return {"MicroMetrics": micro_metrics, "MacroMetrics": macro_metrics}
 
     def close(self):
         self.rec.close()
@@ -72,19 +85,27 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", required=True, help="Path to test sessions JSON")
-    parser.add_argument("--model", choices=["hsp", "ric"], default="hsp")
     parser.add_argument("--top_k", type=int, default=10)
-
     args = parser.parse_args()
 
     sessions = json.load(open(args.data))
+    validator = Validator(top_k=args.top_k)
 
-    validator = Validator(model_name=args.model, top_k=args.top_k)
+    models = ["hsp", "ric"]
+    results = {}
 
-    results = validator.evaluate(sessions)
+    for model_name in models:
+        results[model_name] = validator.evaluate_model(sessions, model_name)
 
-    print("\n📊 Evaluation Results:")
-    for k, v in results.items():
-        print(f"{k}: {v:.4f}")
+    print("\n📊 Evaluation Results (HSP vs RIC)")
+    for metric_type in ["MicroMetrics", "MacroMetrics"]:
+        print(f"\n---- {metric_type} ----")
+        header = f"{'Metric':<12} {'HSP':>10} {'RIC':>10}"
+        print(header)
+        print("-" * len(header))
+        for metric in ["HitRate@K", "MRR@K", "Precision@K", "Recall@K", "nDCG@K"]:
+            hsp_val = results["hsp"][metric_type][metric]
+            ric_val = results["ric"][metric_type][metric]
+            print(f"{metric:<12} {hsp_val:10.4f} {ric_val:10.4f}")
 
     validator.close()

@@ -15,33 +15,37 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 class Recommender:
     def __init__(self, top_k: int = 10, decay: float = 0.7):
-        """Graph-based session recommender orchestrator.
-
-        Wraps HSP and RIC models backed by lightweight in-memory edge maps
-        loaded from Neo4j. Also supports an optional `lookup.json` mapping
-        produced by `database/build_bulk.py` so the CLI can accept either
-        sequential import IDs or original item IDs transparently.
-        """
+        """Graph-based session recommender orchestrator."""
         self.top_k = top_k
         self.decay = decay
         self.driver = Neo4jDriver()
 
-        # Load lightweight in-memory edge maps from the graph for the models
+        # Default weights for scoring
+        self.alpha = 0.5  # NEXT_weight
+        self.beta = 0.3   # CO_OCCURS_weight
+        self.gamma = 0.2  # Recency_weight
+
+        # Load in-memory edge maps from Neo4j
         self.next_edges, self.cooccurs = self._load_graph_edges()
 
-        # Try to load lookup mapping produced during bulk import
+        # Try to load lookup mapping
         self.lookup = self._load_lookup()
 
-        # Initialize modular models using in-memory maps
+        # Initialize modular models
         self.hsp_model = HSPModel(next_edges=self.next_edges)
         self.ric_model = RICModel(next_edges=self.cooccurs, decay=self.decay)
 
-    def _load_graph_edges(self):
-        """Read NEXT and CO_OCCURS edges from Neo4j and build dict maps.
+    def set_weights(self, alpha=None, beta=None, gamma=None):
+        """Update scoring weights for HSP/RIC dynamically."""
+        if alpha is not None:
+            self.alpha = alpha
+        if beta is not None:
+            self.beta = beta
+        if gamma is not None:
+            self.gamma = gamma
 
-        Returns:
-            (next_edges, cooccurs): two dicts mapping src_item -> {dst_item: weight}
-        """
+    def _load_graph_edges(self):
+        """Read NEXT and CO_OCCURS edges from Neo4j and build dict maps."""
         NEXT_QUERY = """
         MATCH (i:Item)-[r:NEXT]->(n:Item)
         RETURN i.item_id AS src, n.item_id AS dst, r.weight AS w
@@ -71,19 +75,13 @@ class Recommender:
                 cooccurs.setdefault(s, {})[d] = w
 
         except Exception:
-            # If something goes wrong (e.g., empty DB), return empty maps
             next_edges = {}
             cooccurs = {}
 
         return next_edges, cooccurs
 
     def _load_lookup(self):
-        """Load `data/neo4j_import/lookup.json` if available and build reverse map.
-
-        Returns dict with keys:
-            - item_to_seq: {original_id_str: seq_id}
-            - seq_to_item: {seq_id: original_id_int}
-        """
+        """Load lookup.json if available."""
         from pathlib import Path
 
         p = Path("data/neo4j_import/lookup.json")
@@ -99,80 +97,55 @@ class Recommender:
             return None
 
     def _map_session_items(self, session_items: List[int]) -> List[int]:
-        """Map provided session item IDs to the original `item_id` values present in the DB.
-
-        Mapping strategy:
-        - If the item matches a key in the in-memory edge maps, keep it.
-        - Else if a `lookup` exists and the value looks like a sequence id, map to original.
-        - Otherwise return the item unchanged.
-        """
+        """Map session items to original item_ids using lookup if needed."""
         if not session_items:
             return []
 
         mapped = []
         for it in session_items:
-            # already matches edge map (assume it's an original item_id)
             if it in self.next_edges or it in self.cooccurs:
                 mapped.append(it)
                 continue
 
-            # try seq->original using lookup
             if self.lookup and isinstance(it, int):
                 seq_map = self.lookup.get("seq_to_item", {})
                 if it in seq_map:
                     mapped.append(seq_map[it])
                     continue
 
-            # fallback: keep original
             mapped.append(it)
 
         return mapped
 
     def hsp_predict(self, session_items: List[int]) -> List[int]:
-        """Predict next items using Hierarchical Sequence Probability model."""
+        """Predict next items using HSP model."""
         if not session_items:
             return global_top_k(self.top_k)
 
         mapped = self._map_session_items(session_items)
-        return self.hsp_model.predict(mapped, top_k=self.top_k)
+        return self.hsp_model.predict(
+            mapped,
+            top_k=self.top_k,
+            alpha=self.alpha,
+            beta=self.beta,
+            gamma=self.gamma
+        )
 
     def ric_predict(self, session_items: List[int]) -> List[int]:
-        """Predict next items using Recurrent Item Co-occurrence model."""
+        """Predict next items using RIC model."""
         if not session_items:
             return global_top_k(self.top_k)
 
         mapped = self._map_session_items(session_items)
 
-        # If there is a precomputed co-occurrence map (unlikely after bulk import), use it
-        if self.cooccurs:
-            scores = {}
-            for idx, item in enumerate(reversed(mapped)):
-                weight = self.decay ** idx
-                if item in self.cooccurs:
-                    for tgt, w in self.cooccurs[item].items():
-                        scores[tgt] = scores.get(tgt, 0) + weight * w
-        else:
-            # Compute co-occurrence on the fly from Session CONTAINS relationships
-            CO_QUERY = """
-            MATCH (i:Item {item_id: $item})<-[:CONTAINS]-(s:Session)-[:CONTAINS]->(n:Item)
-            WHERE n.item_id <> $item
-            RETURN n.item_id AS item, count(*) AS w
-            """
-
-            scores = {}
-            for idx, item in enumerate(reversed(mapped)):
-                w_decay = self.decay ** idx
-                try:
-                    rows = self.driver.read_query(CO_QUERY, {"item": item})
-                except Exception:
-                    rows = []
-
-                for r in rows:
-                    tgt = int(r["item"])
-                    w = float(r.get("w", 0))
+        scores = {}
+        for idx, item in enumerate(reversed(mapped)):
+            w_decay = self.decay ** idx
+            if item in self.cooccurs:
+                for tgt, w in self.cooccurs[item].items():
+                    # Use weights optionally in the future
                     scores[tgt] = scores.get(tgt, 0) + w_decay * w
 
-        # avoid recommending items already in session
         for i in mapped:
             scores.pop(i, None)
 
@@ -180,13 +153,13 @@ class Recommender:
         return [item for item, _ in ranked[: self.top_k]]
 
     def close(self):
-        """Close Neo4j driver connection."""
+        """Close Neo4j connection."""
         if self.driver:
             self.driver.close()
 
 
 # ---------------------------
-# CLI / Quick test
+# CLI
 # ---------------------------
 if __name__ == "__main__":
     import argparse

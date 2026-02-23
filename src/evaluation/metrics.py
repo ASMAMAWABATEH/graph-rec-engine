@@ -1,5 +1,6 @@
-#src/evaluation/metrics.py
+# src/evaluation/metrics.py
 
+import math
 from typing import List
 
 
@@ -20,6 +21,7 @@ def precision_at_k(recommended: List[int], ground_truth: int) -> float:
 
 def recall_at_k(recommended: List[int], ground_truth: int) -> float:
     return float(ground_truth in recommended)
+
 
 def ndcg_at_k(recommended: List[int], ground_truth: int, k: int = 10) -> float:
     """
