@@ -16,10 +16,11 @@ from .metrics import (
 
 
 class Validator:
-    def __init__(self, model_name="hsp", top_k=10):
+    def __init__(self, model_name="hsp", top_k=10, recommender=None):
         self.model_name = model_name
         self.top_k = top_k
-        self.rec = Recommender(top_k=top_k)
+        self.rec = recommender or Recommender(top_k=top_k)
+        self._owns_rec = recommender is None
 
     def evaluate_model(self, sessions: List[List[int]], model_name: str):
         """Evaluate a single model on the test sessions"""
@@ -74,7 +75,8 @@ class Validator:
         return {"MicroMetrics": micro_metrics, "MacroMetrics": macro_metrics}
 
     def close(self):
-        self.rec.close()
+        if self._owns_rec and self.rec:
+            self.rec.close()
 
 
 # -----------------------

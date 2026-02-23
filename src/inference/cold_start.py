@@ -1,11 +1,12 @@
 # src/inference/cold_start.py
 import json
+import csv
 from pathlib import Path
 from collections import Counter
 
 # Path to precomputed item lookup or Neo4j bulk CSVs
 LOOKUP_FILE = Path("data/neo4j_import/lookup.json")
-NEXT_CSV = Path("data/neo4j_import/next.csv")
+NEXT_TYPED_CSV = Path("data/neo4j_import/next_typed.csv")
 ITEMS_CSV = Path("data/neo4j_import/items.csv")
 
 # Preload global top-K items
@@ -23,17 +24,19 @@ def _load_global_top_k():
     # Aggregate weights from NEXT relationships
     weights = Counter()
 
-    if NEXT_CSV.exists():
-        with NEXT_CSV.open() as f:
-            next(f)  # skip header
-            for line in f:
-                parts = line.strip().split("\t")
-                if len(parts) >= 3:
-                    tgt, weight = int(parts[1]), int(parts[2])
+    if NEXT_TYPED_CSV.exists():
+        with NEXT_TYPED_CSV.open(newline="") as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            for row in reader:
+                try:
+                    tgt = int(row["dst_item_id"])
+                    weight = float(row["weight"])
                     weights[tgt] += weight
+                except (TypeError, ValueError, KeyError):
+                    continue
 
     # If CSV missing, fallback to item IDs from lookup
-    elif LOOKUP_FILE.exists():
+    if not weights and LOOKUP_FILE.exists():
         lookup = json.load(LOOKUP_FILE.open())
         weights.update({int(iid): 1 for iid in lookup["item_to_id"].values()})
 

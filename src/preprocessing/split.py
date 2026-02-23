@@ -1,16 +1,10 @@
 # src/preprocessing/split.py
 import pandas as pd
 from pathlib import Path
-import logging
 import yaml
+from src.utils.logger import get_logger
 
-# --- Logger setup ---
-logger = logging.getLogger("splitter")
-logger.setLevel(logging.INFO)
-ch = logging.StreamHandler()
-formatter = logging.Formatter("[%(levelname)s] %(asctime)s - %(message)s")
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+logger = get_logger("splitter")
 
 # --- Load config ---
 with open("configs/preprocessing.yaml", "r") as f:

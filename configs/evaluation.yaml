@@ -1,0 +1,10 @@
+top_k: 10
+max_sessions: 5000
+
+# Primary leaderboard metrics
+metrics:
+  - HitRate@K
+  - MRR@K
+  - Precision@K
+  - Recall@K
+  - nDCG@K

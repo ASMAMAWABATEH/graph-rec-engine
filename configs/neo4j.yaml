@@ -1,0 +1,10 @@
+# Connection settings are typically sourced from `.env`.
+# This file is a reproducible reference for run conventions.
+
+uri_env: NEO4J_URI
+user_env: NEO4J_USER
+password_env: NEO4J_PASSWORD
+database_env: NEO4J_DATABASE
+
+# Optional import staging path for LOAD CSV workflows.
+import_dir:

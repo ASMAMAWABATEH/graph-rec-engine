@@ -1,0 +1,32 @@
+mode: full
+
+# Data paths
+raw: data/raw/yoochoose-clicks.dat
+processed: data/processed/yoochoose_sessions.parquet
+split_dir: data/processed
+bulk_dir: data/neo4j_import
+neo4j_import_dir:
+
+# Runtime behavior
+reuse_intermediate: true
+skip_graph_load: false
+skip_cooccurs: false
+intermediate_state: results/intermediate/pipeline_state.json
+
+# Evaluation + model parameters
+model:
+top_k: 10
+max_sessions: 5000
+subset_validate_sessions: 200
+decay: 0.7
+alpha:
+beta:
+gamma:
+edge_time_decay: 0.0
+
+# Preprocessing
+min_session_length: 2
+min_item_freq: 5
+test_ratio: 0.2
+chunksize: 500000
+max_chunks:

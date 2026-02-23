@@ -1,13 +1,19 @@
 # src/preprocessing/sessionizer.py
 import pandas as pd
 from pathlib import Path
+from typing import Optional
+from src.utils.logger import get_logger
+
+
+logger = get_logger(__name__)
 
 class Sessionizer:
     def __init__(
         self, 
         min_session_length: int = 2, 
         min_item_freq: int = 5, 
-        chunksize: int = 500_000
+        chunksize: int = 500_000,
+        max_chunks: Optional[int] = None,
     ):
         """
         Ultimate memory-efficient sessionizer.
@@ -16,17 +22,19 @@ class Sessionizer:
             min_session_length: remove sessions shorter than this
             min_item_freq: remove items appearing fewer times
             chunksize: rows per chunk for reading
+            max_chunks: optional dev cap to stop early
         """
         self.min_session_length = min_session_length
         self.min_item_freq = min_item_freq
         self.chunksize = chunksize
+        self.max_chunks = max_chunks
 
     def load_raw_chunked(self, path: str) -> pd.DataFrame:
         """Load large raw YOOCHOOSE files in chunks (8GB RAM safe)"""
         all_chunks = []
         raw_path = Path(path)
 
-        print(f"📖 Reading {path} with comma separator...")
+        logger.info("Reading %s with comma separator", path)
 
         for i, chunk in enumerate(pd.read_csv(
             raw_path,
@@ -53,17 +61,16 @@ class Sessionizer:
 
             all_chunks.append(chunk)
 
-            # Dev safety: stop at ~5M rows on 8GB RAM
-            if i >= 9:
-                print("🛑 Reached ~5 million rows (Dev Limit for 8GB RAM).")
+            if self.max_chunks is not None and (i + 1) >= self.max_chunks:
+                logger.info("Reached chunk cap (%s). Stopping early.", self.max_chunks)
                 break
 
-            print(f"Loaded chunk {i+1}: {len(chunk):,} rows")
+            logger.info("Loaded chunk %s: %s rows", i + 1, f"{len(chunk):,}")
 
         df = pd.concat(all_chunks, ignore_index=True)
-        print(f"📊 Total rows loaded: {len(df):,}")
-        print(f"Total sessions: {df['session_id'].nunique():,}")
-        print(f"Total items: {df['item_id'].nunique():,}")
+        logger.info("Total rows loaded: %s", f"{len(df):,}")
+        logger.info("Total sessions: %s", f"{df['session_id'].nunique():,}")
+        logger.info("Total items: %s", f"{df['item_id'].nunique():,}")
         return df
 
     def sessionize(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -71,7 +78,7 @@ class Sessionizer:
         Sort events, filter short sessions, filter infrequent items,
         add position index
         """
-        print("🔄 Sessionizing...")
+        logger.info("Sessionizing...")
 
         # Sort by session_id then timestamp
         df = df.sort_values(["session_id", "timestamp"])
@@ -80,7 +87,11 @@ class Sessionizer:
         session_lengths = df.groupby("session_id").size()
         valid_sessions = session_lengths[session_lengths >= self.min_session_length].index
         df = df[df["session_id"].isin(valid_sessions)]
-        print(f"After session length filter: {len(df):,} events in {len(valid_sessions):,} sessions")
+        logger.info(
+            "After session length filter: %s events in %s sessions",
+            f"{len(df):,}",
+            f"{len(valid_sessions):,}",
+        )
 
         # 2️⃣ Remove infrequent items
         item_counts = df.groupby("item_id").size()
@@ -92,7 +103,12 @@ class Sessionizer:
         valid_sessions = session_lengths[session_lengths >= self.min_session_length].index
         df = df[df["session_id"].isin(valid_sessions)]
 
-        print(f"After item frequency filter: {len(df):,} events in {len(valid_sessions):,} sessions, {df['item_id'].nunique():,} items")
+        logger.info(
+            "After item frequency filter: %s events in %s sessions, %s items",
+            f"{len(df):,}",
+            f"{len(valid_sessions):,}",
+            f"{df['item_id'].nunique():,}",
+        )
 
         # 4️⃣ Add position per session
         df["position"] = df.groupby("session_id").cumcount()
@@ -107,7 +123,7 @@ class Sessionizer:
         processed_df = self.sessionize(df)
         processed_df.to_parquet(output_path, index=False)
 
-        print(f"💾 Saved {len(processed_df)} events to {output_path}")
+        logger.info("Saved %s events to %s", f"{len(processed_df):,}", output_path)
         return processed_df
 
 

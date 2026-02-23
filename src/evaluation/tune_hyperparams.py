@@ -3,7 +3,9 @@
 import json
 import itertools
 import csv
+from pathlib import Path
 from tqdm import tqdm
+import pandas as pd
 
 from src.inference.recommender import Recommender
 from src.evaluation.metrics import hit_rate_at_k, mrr_at_k, precision_at_k, recall_at_k, ndcg_at_k
@@ -50,7 +52,7 @@ class HyperparamTuner:
             "nDCG@K": sum(ndcgs)/len(ndcgs) if ndcgs else 0.0
         }
 
-    def tune(self, model_name="hsp", output_csv="results/tables/hyperparam_tuning.csv"):
+    def tune(self, model_name="hsp", output_csv="results/tables/hyperparam_tuning.csv", append=False):
         results = []
 
         # Iterate all combinations
@@ -70,9 +72,14 @@ class HyperparamTuner:
 
         # Save results to CSV
         fieldnames = ["model", "alpha", "beta", "gamma", "HitRate@K", "MRR@K", "Precision@K", "Recall@K", "nDCG@K"]
-        with open(output_csv, "w", newline="") as f:
+        output_path = Path(output_csv)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        mode = "a" if append and output_path.exists() else "w"
+        write_header = mode == "w"
+        with output_path.open(mode, newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
+            if write_header:
+                writer.writeheader()
             for row in results:
                 writer.writerow(row)
 
@@ -80,17 +87,78 @@ class HyperparamTuner:
         return results
 
 
+def load_sessions(data_path: str, max_sessions: int | None = None):
+    path = Path(data_path)
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found.")
+
+    if path.suffix.lower() == ".parquet":
+        df = pd.read_parquet(path)
+        if "session_id" not in df.columns or "item_id" not in df.columns:
+            raise ValueError("Parquet must contain session_id and item_id columns")
+
+        sort_cols = ["session_id"]
+        if "position" in df.columns:
+            sort_cols.append("position")
+        elif "timestamp" in df.columns:
+            sort_cols.append("timestamp")
+
+        df = df.sort_values(sort_cols)
+        sessions = (
+            df.groupby("session_id", sort=True)["item_id"]
+            .apply(lambda s: [int(x) for x in s.tolist()])
+            .tolist()
+        )
+    else:
+        payload = json.load(path.open())
+        if not isinstance(payload, list):
+            raise ValueError("JSON must be a list of sessions")
+        if payload and isinstance(payload[0], dict):
+            grouped = {}
+            for row in payload:
+                sid = row.get("session_id")
+                item = row.get("item_id")
+                if sid is None or item is None:
+                    continue
+                grouped.setdefault(int(sid), []).append(int(item))
+            sessions = [seq for _, seq in sorted(grouped.items())]
+        else:
+            sessions = [[int(x) for x in seq] for seq in payload]
+
+    sessions = [s for s in sessions if len(s) >= 2]
+    if max_sessions is not None:
+        sessions = sessions[:max_sessions]
+    return sessions
+
+
+def parse_floats(values: str | None):
+    if not values:
+        return None
+    return [float(v.strip()) for v in values.split(",") if v.strip()]
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", required=True, help="Path to test sessions JSON")
+    parser.add_argument("--data", required=True, help="Path to sessions JSON or Parquet")
     parser.add_argument("--model", choices=["hsp", "ric"], default="hsp")
     parser.add_argument("--top_k", type=int, default=10)
+    parser.add_argument("--max_sessions", type=int, default=None)
+    parser.add_argument("--alphas", type=str, default=None, help="Comma-separated floats")
+    parser.add_argument("--betas", type=str, default=None, help="Comma-separated floats")
+    parser.add_argument("--gammas", type=str, default=None, help="Comma-separated floats")
+    parser.add_argument("--output_csv", type=str, default="results/tables/hyperparam_tuning.csv")
+    parser.add_argument("--append", action="store_true")
     args = parser.parse_args()
 
-    # Load sessions
-    sessions = json.load(open(args.data))
+    sessions = load_sessions(args.data, max_sessions=args.max_sessions)
 
-    tuner = HyperparamTuner(sessions=sessions, top_k=args.top_k)
-    tuner.tune(model_name=args.model)
+    tuner = HyperparamTuner(
+        sessions=sessions,
+        top_k=args.top_k,
+        alphas=parse_floats(args.alphas),
+        betas=parse_floats(args.betas),
+        gammas=parse_floats(args.gammas),
+    )
+    tuner.tune(model_name=args.model, output_csv=args.output_csv, append=args.append)

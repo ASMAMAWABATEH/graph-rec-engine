@@ -17,15 +17,99 @@ make preprocess
 
 # 3) Build Neo4j graph
 make build-graph
+```
+
+If Neo4j runs outside this repo, pass its import directory so `LOAD CSV` can see the files:
+
+```bash
+make build-graph NEO4J_IMPORT_DIR=/path/to/neo4j/import
+```
 
 After this, you can evaluate models or run tests:
 
+```bash
 make evaluate
 make test
+```
+
+## Pipeline & Inference Scripts
+
+Run end-to-end pipeline from one command (YAML-driven):
+
+```bash
+.venv/bin/python -m src.cli.pipeline --config configs/pipeline.yaml
+```
+
+Useful flags:
+
+```bash
+# Reuse saved intermediate artifacts (default true)
+.venv/bin/python -m src.cli.pipeline --reuse-intermediate
+
+# Skip reloading graph to Neo4j when already built
+.venv/bin/python -m src.cli.pipeline --skip-graph-load
+
+# Quick validation on a small subset before full eval
+.venv/bin/python -m src.cli.pipeline --subset_validate_sessions 200
+```
+
+Run inference (single or batch) with latency tracking:
+
+```bash
+# single session
+.venv/bin/python -m src.cli.inference --session 12 45 78 --model both --top_k 10
+
+# batch file input
+.venv/bin/python -m src.cli.inference --input data/test_session.json --model both
+```
+
+Optional time-decay on Neo4j edge weights (NEXT/CO_OCCURS):
+
+```bash
+.venv/bin/python -m src.cli.pipeline --edge_time_decay 0.05
+.venv/bin/python -m src.cli.inference --edge_time_decay 0.05
+```
+
+## Experiments & Hyperparameter Tuning
+
+Use the reproducible experiment workflow (defaults to `experiments/hsp_vs_ric.yaml`):
+
+```bash
+# 1) Hyperparameter tuning (writes results/tables/hyperparam_tuning.csv)
+make tune
+
+# 2) Final tuned evaluation for HSP + RIC
+make final-eval
+
+# 3) Build merged comparison table
+make compare-eval
+```
+
+Or run everything end-to-end:
+
+```bash
+make experiment-all
+```
+
+Generate notebook-style visualization artifacts in one command:
+
+```bash
+make viz-smoke
+```
+
+Run with a different experiment file:
+
+```bash
+make tune EXPERIMENT=experiments/hyperparam_tuning.yaml
+make final-eval EXPERIMENT=experiments/hsp_vs_ric.yaml
+make compare-eval EXPERIMENT=experiments/hsp_vs_ric.yaml
+```
 
 Cleanup temporary files and cache:
 
+```bash
 make clean
+```
 
 Project Phases
 Phase 1: Data Orchestration
@@ -49,9 +133,11 @@ Output folder: data/neo4j_import/ containing:
 
     sessions.csv
 
-    next.csv
+    next_typed.csv
 
-    contains.csv
+    contains_typed.csv
+
+    cooccurs_typed.csv
 
     lookup.json
 
@@ -99,8 +185,13 @@ graph-sbr-system/
 ├─ database/
 │  ├─ build_bulk.py        # Generates bulk CSVs
 │  └─ cypher/              # Neo4j Cypher scripts
-├─ src/                     # Preprocessing scripts
+├─ src/
+│  ├─ cli/                 # Canonical CLI entrypoints
+│  ├─ preprocessing/       # Data preparation modules
+│  ├─ inference/           # Recommendation logic
+│  └─ evaluation/          # Metrics and validation
 ├─ tests/                   # Test suite
-├─ run_pipeline.py          # Main pipeline runner
+├─ run_pipeline.py          # Backward-compatible wrapper
+├─ run_inference.py         # Backward-compatible wrapper
 ├─ Makefile                 # Orchestrates phases
 └─ README.md

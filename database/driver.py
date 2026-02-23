@@ -2,8 +2,8 @@ import os
 import json
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
-import logging
 import argparse
+from src.utils.logger import configure_logging, get_logger
 
 # ---------------------------
 # Load .env variables
@@ -15,14 +15,8 @@ NEO4J_USER = os.getenv("NEO4J_USER")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")
 
-# ---------------------------
-# Logging setup
-# ---------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(levelname)s] %(asctime)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = get_logger(__name__)
 
 # ---------------------------
 # Neo4j Driver Wrapper

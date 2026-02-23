@@ -1,103 +1,127 @@
+import csv
 import json
 from collections import defaultdict
+from itertools import combinations
 from pathlib import Path
+from typing import Any
+from src.utils.logger import get_logger
 
-data_path = Path("data/batch.json")
-out = Path("data/neo4j_import")
-out.mkdir(parents=True, exist_ok=True)
 
-print("📦 Loading JSON...")
-data = json.load(data_path.open())
+logger = get_logger(__name__)
 
-# ----------------------------------------
-# 1) UNIQUE ITEMS → SEQUENTIAL IDS
-# ----------------------------------------
-items = set()
-for r in data:
-    items.add(r["item_id"])
-    if r.get("next_item_id"):
-        items.add(r["next_item_id"])
 
-items_list = sorted(items)
-id_map = {item_id: i for i, item_id in enumerate(items_list)}
+def write_tsv(path: Path, header: list[str], rows) -> None:
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f, delimiter="\t")
+        writer.writerow(header)
+        writer.writerows(rows)
 
-print(f"📊 {len(items_list)} unique items")
 
-# ----------------------------------------
-# 2) AGGREGATE NEXT
-# ----------------------------------------
-next_agg = defaultdict(lambda: {"weight": 0, "sessions": set()})
+def build_bulk_from_rows(rows: list[dict[str, Any]], out_dir: Path) -> dict[str, int]:
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-for r in data:
-    if r.get("next_item_id"):
-        i1 = id_map[r["item_id"]]
-        i2 = id_map[r["next_item_id"]]
+    items = set()
+    sessions = set()
+    next_agg = defaultdict(int)
+    contains = set()
 
-        k = (i1, i2)
-        next_agg[k]["weight"] += 1
+    for row in rows:
+        item_id = row.get("item_id")
+        next_item_id = row.get("next_item_id")
+        session_id = row.get("session_id")
 
-        if r.get("session_id"):
-            next_agg[k]["sessions"].add(str(r["session_id"]))
+        if item_id is None:
+            continue
 
-print(f"📊 NEXT edges aggregated: {len(next_agg)}")
+        item_id = int(item_id)
+        items.add(item_id)
 
-# ----------------------------------------
-# 3) SESSIONS + CONTAINS
-# ----------------------------------------
-sessions = sorted({r["session_id"] for r in data if r.get("session_id")})
-session_map = {sid: i for i, sid in enumerate(sessions)}
+        if session_id is not None:
+            session_id = int(session_id)
+            sessions.add(session_id)
+            contains.add((session_id, item_id))
 
-contains = set()
-for r in data:
-    if r.get("session_id"):
-        contains.add(
-            (session_map[r["session_id"]], id_map[r["item_id"]])
-        )
+        if next_item_id is not None:
+            next_item_id = int(next_item_id)
+            items.add(next_item_id)
+            next_agg[(item_id, next_item_id)] += 1
 
-print(f"📊 Sessions: {len(sessions)}")
-print(f"📊 CONTAINS: {len(contains)}")
+    items = sorted(items)
+    sessions = sorted(sessions)
+    next_rows = sorted(next_agg.items())
+    contains_rows = sorted(contains)
 
-# ========================================
-# WRITE CSV (NEO4J-ADMIN FORMAT)
-# ========================================
+    cooccurs_agg = defaultdict(int)
+    current_session = None
+    session_items: list[int] = []
 
-# ---- ITEMS ----
-with open(out / "items.csv", "w") as f:
-    # Add :item_id:int property for correct querying
-    f.write(":ID(Item)\t:item_id:int\t:LABEL\n")
-    for i, item_id in enumerate(items_list):
-        f.write(f"{i}\t{item_id}\tItem\n")
+    for session_id, item_id in contains_rows:
+        if current_session is None:
+            current_session = session_id
 
-# ---- SESSIONS ----
-with open(out / "sessions.csv", "w") as f:
-    f.write(":ID(Session)\t:LABEL\n")
-    for i in range(len(sessions)):
-        f.write(f"{i}\tSession\n")
+        if session_id != current_session:
+            if len(session_items) >= 2:
+                for i1, i2 in combinations(session_items, 2):
+                    cooccurs_agg[(i1, i2)] += 1
+            current_session = session_id
+            session_items = []
 
-# ---- NEXT ----
-with open(out / "next.csv", "w") as f:
-    f.write(":START_ID(Item)\t:END_ID(Item)\tweight:int\tsessions:string[]\n")
+        session_items.append(item_id)
 
-    for (i1, i2), v in next_agg.items():
-        sess = ";".join(v["sessions"])      # ← NEO4J ARRAY FORMAT
-        f.write(f"{i1}\t{i2}\t{v['weight']}\t{sess}\n")
+    if len(session_items) >= 2:
+        for i1, i2 in combinations(session_items, 2):
+            cooccurs_agg[(i1, i2)] += 1
 
-# ---- CONTAINS ----
-with open(out / "contains.csv", "w") as f:
-    f.write(":START_ID(Session)\t:END_ID(Item)\n")
+    cooccurs_rows = sorted((src, dst, w) for (src, dst), w in cooccurs_agg.items())
 
-    for s_id, i_id in contains:
-        f.write(f"{s_id}\t{i_id}\n")
+    write_tsv(out_dir / "items.csv", ["item_id"], ((item_id,) for item_id in items))
+    write_tsv(out_dir / "sessions.csv", ["session_id"], ((session_id,) for session_id in sessions))
+    write_tsv(
+        out_dir / "next_typed.csv",
+        ["src_item_id", "dst_item_id", "weight"],
+        ((src, dst, w) for (src, dst), w in next_rows),
+    )
+    write_tsv(out_dir / "contains_typed.csv", ["session_id", "item_id"], contains_rows)
+    write_tsv(
+        out_dir / "cooccurs_typed.csv",
+        ["src_item_id", "dst_item_id", "weight"],
+        cooccurs_rows,
+    )
 
-# ---- LOOKUP ----
-with open(out / "lookup.json", "w") as f:
-    json.dump({
-        "item_to_id": id_map,
-        "session_to_id": session_map
-    }, f)
+    lookup = {
+        "item_to_id": {str(item_id): item_id for item_id in items},
+        "session_to_id": {str(session_id): session_id for session_id in sessions},
+    }
+    with (out_dir / "lookup.json").open("w") as f:
+        json.dump(lookup, f)
 
-print("✅ BULK FILES READY")
-print(f"• items.csv: {len(items_list)}")
-print(f"• sessions.csv: {len(sessions)}")
-print(f"• next.csv: {len(next_agg)}")
-print(f"• contains.csv: {len(contains)}")
+    return {
+        "items": len(items),
+        "sessions": len(sessions),
+        "next_edges": len(next_rows),
+        "contains_edges": len(contains_rows),
+        "cooccurs_edges": len(cooccurs_rows),
+    }
+
+
+def build_bulk_from_json(data_path: Path, out_dir: Path) -> dict[str, int]:
+    logger.info("Loading batch rows from %s", data_path)
+    rows = json.load(data_path.open())
+    stats = build_bulk_from_rows(rows, out_dir)
+    logger.info("Items: %s", f"{stats['items']:,}")
+    logger.info("Sessions: %s", f"{stats['sessions']:,}")
+    logger.info("NEXT edges: %s", f"{stats['next_edges']:,}")
+    logger.info("CONTAINS edges: %s", f"{stats['contains_edges']:,}")
+    logger.info("CO_OCCURS edges: %s", f"{stats['cooccurs_edges']:,}")
+    logger.info("Bulk files ready in %s", out_dir)
+    return stats
+
+
+def main() -> None:
+    data_path = Path("data/batch.json")
+    out_dir = Path("data/neo4j_import")
+    build_bulk_from_json(data_path, out_dir)
+
+
+if __name__ == "__main__":
+    main()

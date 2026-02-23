@@ -1,0 +1,24 @@
+experiment:
+  name: ric_decay_ablation
+  description: Measure sensitivity of RIC to decay (gamma) while keeping alpha/beta fixed.
+
+data:
+  eval_path: data/processed/test_sessions.parquet
+  max_sessions: 5000
+
+evaluation:
+  top_k: 10
+  metrics:
+    - HitRate@K
+    - MRR@K
+    - nDCG@K
+
+ric_fixed_weights:
+  alpha: 0.50
+  beta: 0.30
+
+ablation:
+  gamma_values: [0.10, 0.20, 0.30, 0.50, 0.70, 0.90]
+
+outputs:
+  table: results/tables/ric_decay_ablation.csv

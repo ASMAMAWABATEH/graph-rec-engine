@@ -1,0 +1,9 @@
+model: both
+top_k: 10
+decay: 0.7
+alpha:
+beta:
+gamma:
+edge_time_decay: 0.0
+input:
+output:
