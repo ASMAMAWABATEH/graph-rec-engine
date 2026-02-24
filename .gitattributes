@@ -1,0 +1,2 @@
+# Store generated Neo4j import tables in Git LFS.
+data/neo4j_import/*.csv filter=lfs diff=lfs merge=lfs -text

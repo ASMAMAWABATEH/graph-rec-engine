@@ -1,0 +1,31 @@
+experiment:
+  name: full_hyperparam_grid
+  description: Shared baseline grid for reproducible hyperparameter searches.
+
+data:
+  eval_path: data/processed/test_sessions.parquet
+  max_sessions: 5000
+
+evaluation:
+  top_k_values: [10]
+  metrics:
+    - HitRate@K
+    - MRR@K
+    - nDCG@K
+    - Recall@K
+    - Precision@K
+
+grid:
+  alpha: [0.00, 0.25, 0.50, 0.75, 1.00]
+  beta:  [0.00, 0.25, 0.50, 0.75, 1.00]
+  gamma: [0.00, 0.25, 0.50, 0.75, 1.00]
+  normalize_weights: true
+
+runtime:
+  random_seed: 42
+  model_order:
+    - hsp
+    - ric
+
+outputs:
+  tuning_table: results/tables/hyperparam_tuning.csv

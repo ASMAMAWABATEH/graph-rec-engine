@@ -2,8 +2,8 @@ import os
 import json
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
-import logging
 import argparse
+from src.utils.logger import configure_logging, get_logger
 
 # ---------------------------
 # Load .env variables
@@ -15,14 +15,8 @@ NEO4J_USER = os.getenv("NEO4J_USER")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")
 
-# ---------------------------
-# Logging setup
-# ---------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(levelname)s] %(asctime)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = get_logger(__name__)
 
 # ---------------------------
 # Neo4j Driver Wrapper
@@ -36,14 +30,22 @@ class Neo4jDriver:
         if not all([NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD]):
             raise ValueError("Neo4j connection variables missing in .env")
 
+        connect_uri = NEO4J_URI
+        # For single-instance local servers prefer direct bolt scheme to avoid routing errors
+        if connect_uri and connect_uri.startswith("neo4j://"):
+            connect_uri = connect_uri.replace("neo4j://", "bolt://")
+
         self.driver = GraphDatabase.driver(
-            NEO4J_URI,
+            connect_uri,
             auth=(NEO4J_USER, NEO4J_PASSWORD)
         )
 
         # Pre-flight connectivity check
-        self.driver.verify_connectivity()
-        logger.info(f"🚀 Connected to Neo4j at {NEO4J_URI} (DB: {NEO4J_DATABASE})")
+        try:
+            self.driver.verify_connectivity()
+            logger.info(f"🚀 Connected to Neo4j at {NEO4J_URI} (DB: {NEO4J_DATABASE})")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not verify connectivity: {e} — proceeding without verification")
 
     def close(self):
         """Close the Neo4j driver connection."""

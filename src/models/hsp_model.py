@@ -1,28 +1,61 @@
 # src/models/hsp_model.py
-
 from typing import List, Dict
 from .base import BaseRecommender
 
 class HSPModel(BaseRecommender):
     """
     HSP: Hierarchical Sequence Probability
-    Uses NEXT relationships in the graph to score next-item probabilities.
+    Scores next items based on hierarchical probabilities from the NEXT edges in the graph.
     """
 
-    NEXT_QUERY = """
-    MATCH (i:Item {item_id: $item})-[r:NEXT]->(n:Item)
-    RETURN n.item_id AS item, r.weight AS w
-    ORDER BY r.weight DESC
-    LIMIT 200
-    """
+    def __init__(self, next_edges: Dict[int, Dict[int, int]]):
+        """
+        next_edges: dictionary {source_item_id: {target_item_id: weight}}
+        """
+        self.next_edges = next_edges
 
-    def score(self, session_items: List[int]) -> Dict[int, float]:
+    def predict(
+        self,
+        session_items: List[int],
+        top_k: int = 10,
+        alpha: float = 1.0,
+        beta: float = 0.5,
+        gamma: float = 1.0
+    ) -> List[int]:
+        """
+        Predict the next items given session_items with weighting:
+        - alpha: weight for last_item NEXT edges
+        - beta: weight for second-to-last item (backoff)
+        - gamma: recency / decay factor
+        """
+        scores = self.score(session_items, alpha=alpha, beta=beta, gamma=gamma)
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return [item for item, _ in ranked[:top_k]]
+
+    def score(
+        self,
+        session_items: List[int],
+        alpha: float = 1.0,
+        beta: float = 0.5,
+        gamma: float = 1.0
+    ) -> Dict[int, float]:
         if not session_items:
             return {}
 
-        last_item = session_items[-1]
+        scores = {}
+        n = len(session_items)
 
-        rows = self.db.read_query(self.NEXT_QUERY, {"item": last_item})
-        scores = {r["item"]: float(r["w"]) for r in rows}
+        # last item
+        last_item = session_items[-1]
+        if last_item in self.next_edges:
+            for tgt, w in self.next_edges[last_item].items():
+                scores[tgt] = scores.get(tgt, 0) + alpha * float(w) * gamma**0
+
+        # second-to-last item (backoff)
+        if n >= 2:
+            prev_item = session_items[-2]
+            if prev_item in self.next_edges:
+                for tgt, w in self.next_edges[prev_item].items():
+                    scores[tgt] = scores.get(tgt, 0) + beta * float(w) * gamma**1
 
         return scores

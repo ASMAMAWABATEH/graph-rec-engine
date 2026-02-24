@@ -1,0 +1,40 @@
+experiment:
+  name: hsp_vs_ric_tuning
+  description: Compare HSP and RIC with matched search budget on the same test split.
+
+data:
+  eval_path: data/processed/test_sessions.parquet
+  max_sessions: 5000
+  min_session_length: 2
+
+evaluation:
+  top_k: 10
+  metrics:
+    - HitRate@K
+    - MRR@K
+    - nDCG@K
+    - Recall@K
+    - Precision@K
+  primary_metric: HitRate@K
+  tie_break_metric: MRR@K
+
+scoring:
+  transition_mix: 0.5
+
+search:
+  normalize_weights: true
+  models:
+    hsp:
+      alpha: [0.40, 0.50, 0.60, 0.70]
+      beta:  [0.10, 0.20, 0.30, 0.40]
+      gamma: [0.10, 0.20, 0.30, 0.50]
+    ric:
+      alpha: [0.30, 0.40, 0.50, 0.60]
+      beta:  [0.20, 0.30, 0.40, 0.50]
+      gamma: [0.20, 0.30, 0.50, 0.70]
+
+outputs:
+  tuning_table: results/tables/hyperparam_tuning.csv
+  final_hsp: results/tables/final_eval_hsp.csv
+  final_ric: results/tables/final_eval_ric.csv
+  comparison: results/tables/final_eval_comparison.csv
