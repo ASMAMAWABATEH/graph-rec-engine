@@ -18,6 +18,9 @@ evaluation:
   primary_metric: HitRate@K
   tie_break_metric: MRR@K
 
+scoring:
+  transition_mix: 0.5
+
 search:
   normalize_weights: true
   models:

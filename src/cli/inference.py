@@ -157,6 +157,7 @@ def build_parser(config_path: Path) -> argparse.ArgumentParser:
     parser.add_argument("--beta", type=float, default=cfg.get("beta"))
     parser.add_argument("--gamma", type=float, default=cfg.get("gamma"))
     parser.add_argument("--edge_time_decay", type=float, default=float(cfg.get("edge_time_decay", 0.0)))
+    parser.add_argument("--transition_mix", type=float, default=float(cfg.get("transition_mix", 0.5)))
     parser.add_argument("--session", nargs="*", type=int, default=None, help="Single session as item IDs")
     parser.add_argument("--input", type=Path, default=Path(cfg["input"]) if cfg.get("input") else None)
     parser.add_argument("--output", type=Path, default=Path(cfg["output"]) if cfg.get("output") else None)
@@ -182,6 +183,7 @@ def main() -> None:
         top_k=args.top_k,
         decay=args.decay,
         edge_time_decay_lambda=args.edge_time_decay,
+        transition_mix=args.transition_mix,
     )
     rec.set_weights(alpha=args.alpha, beta=args.beta, gamma=args.gamma)
 
@@ -256,6 +258,7 @@ def main() -> None:
             "batch_size": len(output_rows),
             "top_k": args.top_k,
             "model": args.model,
+            "transition_mix": args.transition_mix,
             "latency_summary_ms": latency_summary,
             "results": output_rows,
         }

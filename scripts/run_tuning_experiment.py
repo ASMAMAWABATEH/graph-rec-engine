@@ -23,6 +23,7 @@ def main() -> None:
     data_cfg = cfg["data"]
     eval_cfg = cfg["evaluation"]
     search_cfg = cfg["search"]
+    scoring_cfg = cfg.get("scoring", {})
     output_csv = cfg["outputs"]["tuning_table"]
 
     sessions = load_sessions(
@@ -40,6 +41,7 @@ def main() -> None:
             alphas=model_grid["alpha"],
             betas=model_grid["beta"],
             gammas=model_grid["gamma"],
+            transition_mix=float(scoring_cfg.get("transition_mix", 0.5)),
         )
         tuner.tune(
             model_name=model_name,

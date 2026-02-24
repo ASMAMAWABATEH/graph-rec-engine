@@ -12,11 +12,18 @@ logger = get_logger(__name__)
 
 
 class Recommender:
-    def __init__(self, top_k: int = 10, decay: float = 0.7, edge_time_decay_lambda: float = 0.0):
+    def __init__(
+        self,
+        top_k: int = 10,
+        decay: float = 0.7,
+        edge_time_decay_lambda: float = 0.0,
+        transition_mix: float = 0.5,
+    ):
         """Graph-based session recommender orchestrator."""
         self.top_k = top_k
         self.decay = decay
         self.edge_time_decay_lambda = max(0.0, float(edge_time_decay_lambda))
+        self.transition_mix = max(0.0, min(1.0, float(transition_mix)))
         self.driver = Neo4jDriver()
 
         # Default weights for scoring
@@ -26,6 +33,8 @@ class Recommender:
 
         # Load in-memory edge maps from Neo4j
         self.next_edges, self.cooccurs = self._load_graph_edges()
+        self.next_edges = self._hybridize_edges(self.next_edges)
+        self.cooccurs = self._hybridize_edges(self.cooccurs)
 
         # Try to load lookup mapping
         self.lookup = self._load_lookup()
@@ -92,6 +101,45 @@ class Recommender:
             cooccurs = {}
 
         return next_edges, cooccurs
+
+    def _hybridize_edges(self, edges: dict[int, dict[int, float]]) -> dict[int, dict[int, float]]:
+        """
+        Blend transition probability and edge weight into one score:
+        - transition_mix=0.0 -> raw weight
+        - transition_mix=1.0 -> pure probability P(j|i)
+        - otherwise -> weighted blend of probability and max-normalized weight
+        """
+        if not edges:
+            return edges
+
+        if self.transition_mix <= 0.0:
+            return edges
+
+        out: dict[int, dict[int, float]] = {}
+        for src, targets in edges.items():
+            if not targets:
+                out[src] = {}
+                continue
+
+            weights = [float(w) for w in targets.values() if float(w) > 0.0]
+            total = sum(weights)
+            max_w = max(weights) if weights else 0.0
+            if total <= 0.0:
+                out[src] = dict(targets)
+                continue
+
+            if self.transition_mix >= 1.0:
+                out[src] = {dst: float(w) / total for dst, w in targets.items()}
+                continue
+
+            mixed: dict[int, float] = {}
+            for dst, raw_w in targets.items():
+                w = float(raw_w)
+                prob = w / total
+                norm_w = (w / max_w) if max_w > 0.0 else 0.0
+                mixed[dst] = (self.transition_mix * prob) + ((1.0 - self.transition_mix) * norm_w)
+            out[src] = mixed
+        return out
 
     def _load_lookup(self):
         """Load lookup.json if available."""
@@ -202,10 +250,14 @@ if __name__ == "__main__":
         "--decay", type=float, default=0.7,
         help="Temporal decay factor (RIC only)"
     )
+    parser.add_argument(
+        "--transition_mix", type=float, default=0.5,
+        help="Hybrid mix for transition scoring (0=weight, 1=probability)"
+    )
 
     args = parser.parse_args()
 
-    rec = Recommender(top_k=args.top_k, decay=args.decay)
+    rec = Recommender(top_k=args.top_k, decay=args.decay, transition_mix=args.transition_mix)
 
     try:
         if args.model == "hsp":

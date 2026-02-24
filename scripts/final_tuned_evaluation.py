@@ -52,12 +52,13 @@ def evaluate_with_best_params(
     top_k: int,
     tuning_csv: Path,
     output_csv: Path,
+    transition_mix: float,
 ):
     print(f"\nEvaluating {model_name.upper()} with best hyperparameters...")
     alpha, beta, gamma = load_best_params(tuning_csv, model_name)
     print(f"Using alpha={alpha}, beta={beta}, gamma={gamma}")
 
-    rec = Recommender(top_k=top_k)
+    rec = Recommender(top_k=top_k, transition_mix=transition_mix)
     rec.set_weights(alpha=alpha, beta=beta, gamma=gamma)
 
     validator = Validator(top_k=top_k, recommender=rec)
@@ -89,6 +90,7 @@ def main():
     data_cfg = cfg["data"]
     eval_cfg = cfg["evaluation"]
     out_cfg = cfg["outputs"]
+    scoring_cfg = cfg.get("scoring", {})
 
     sessions = load_sessions(
         data_cfg["eval_path"],
@@ -103,6 +105,7 @@ def main():
         top_k=int(eval_cfg["top_k"]),
         tuning_csv=tuning_csv,
         output_csv=Path(out_cfg["final_hsp"]),
+        transition_mix=float(scoring_cfg.get("transition_mix", 0.5)),
     )
     evaluate_with_best_params(
         "ric",
@@ -110,6 +113,7 @@ def main():
         top_k=int(eval_cfg["top_k"]),
         tuning_csv=tuning_csv,
         output_csv=Path(out_cfg["final_ric"]),
+        transition_mix=float(scoring_cfg.get("transition_mix", 0.5)),
     )
 
 

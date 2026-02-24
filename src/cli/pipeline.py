@@ -168,6 +168,7 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
         top_k=args.top_k,
         decay=args.decay,
         edge_time_decay_lambda=args.edge_time_decay,
+        transition_mix=args.transition_mix,
     )
     try:
         rec.set_weights(alpha=args.alpha, beta=args.beta, gamma=args.gamma)
@@ -179,7 +180,12 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
     finally:
         rec.close()
 
-    payload = {"model": args.model, "top_k": args.top_k, "results": results}
+    payload = {
+        "model": args.model,
+        "top_k": args.top_k,
+        "transition_mix": args.transition_mix,
+        "results": results,
+    }
     logger.info("Evaluation complete for model=%s top_k=%s", args.model, args.top_k)
     print(json.dumps(payload, indent=2))
 
@@ -265,6 +271,7 @@ def run_full_pipeline(args: argparse.Namespace) -> dict[str, Any]:
         top_k=args.top_k,
         decay=args.decay,
         edge_time_decay_lambda=args.edge_time_decay,
+        transition_mix=args.transition_mix,
     )
     try:
         rec.set_weights(alpha=args.alpha, beta=args.beta, gamma=args.gamma)
@@ -273,6 +280,7 @@ def run_full_pipeline(args: argparse.Namespace) -> dict[str, Any]:
             "cooccurs_sources": len(rec.cooccurs),
             "weights": {"alpha": rec.alpha, "beta": rec.beta, "gamma": rec.gamma},
             "edge_time_decay_lambda": rec.edge_time_decay_lambda,
+            "transition_mix": rec.transition_mix,
         }
 
         logger.info("[4/4] Evaluate and save metrics")
@@ -399,6 +407,7 @@ def build_parser(config_path: Path) -> argparse.ArgumentParser:
     parser.add_argument("--beta", type=float, default=cfg.get("beta"))
     parser.add_argument("--gamma", type=float, default=cfg.get("gamma"))
     parser.add_argument("--edge_time_decay", type=float, default=float(cfg.get("edge_time_decay", 0.0)))
+    parser.add_argument("--transition_mix", type=float, default=float(cfg.get("transition_mix", 0.5)))
     return parser
 
 

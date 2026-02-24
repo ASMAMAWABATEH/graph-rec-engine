@@ -74,6 +74,15 @@ Optional time-decay on Neo4j edge weights (NEXT/CO_OCCURS):
 .venv/bin/python -m src.cli.inference --edge_time_decay 0.05
 ```
 
+Hybrid transition scoring (probability + weight):
+
+```bash
+# transition_mix in [0,1]
+# 0.0 = raw weight only, 1.0 = pure probability P(j|i), 0.5 = hybrid blend
+.venv/bin/python -m src.cli.pipeline --transition_mix 0.5
+.venv/bin/python -m src.cli.inference --transition_mix 0.5
+```
+
 ## Experiments & Hyperparameter Tuning
 
 Use the reproducible experiment workflow (defaults to `experiments/hsp_vs_ric.yaml`):

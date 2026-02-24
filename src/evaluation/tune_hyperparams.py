@@ -12,16 +12,17 @@ from src.evaluation.metrics import hit_rate_at_k, mrr_at_k, precision_at_k, reca
 
 
 class HyperparamTuner:
-    def __init__(self, sessions, top_k=10, alphas=None, betas=None, gammas=None):
+    def __init__(self, sessions, top_k=10, alphas=None, betas=None, gammas=None, transition_mix: float = 0.5):
         self.sessions = sessions
         self.top_k = top_k
+        self.transition_mix = transition_mix
 
         # Define default ranges if not provided
         self.alphas = alphas if alphas is not None else [0.0, 0.25, 0.5, 0.75, 1.0]
         self.betas = betas if betas is not None else [0.0, 0.25, 0.5, 0.75, 1.0]
         self.gammas = gammas if gammas is not None else [0.0, 0.25, 0.5, 0.75, 1.0]
 
-        self.rec = Recommender(top_k=top_k)
+        self.rec = Recommender(top_k=top_k, transition_mix=transition_mix)
 
     def evaluate_model(self, model_name):
         """Evaluate current Recommender configuration."""
@@ -148,6 +149,7 @@ if __name__ == "__main__":
     parser.add_argument("--alphas", type=str, default=None, help="Comma-separated floats")
     parser.add_argument("--betas", type=str, default=None, help="Comma-separated floats")
     parser.add_argument("--gammas", type=str, default=None, help="Comma-separated floats")
+    parser.add_argument("--transition_mix", type=float, default=0.5)
     parser.add_argument("--output_csv", type=str, default="results/tables/hyperparam_tuning.csv")
     parser.add_argument("--append", action="store_true")
     args = parser.parse_args()
@@ -160,5 +162,6 @@ if __name__ == "__main__":
         alphas=parse_floats(args.alphas),
         betas=parse_floats(args.betas),
         gammas=parse_floats(args.gammas),
+        transition_mix=args.transition_mix,
     )
     tuner.tune(model_name=args.model, output_csv=args.output_csv, append=args.append)

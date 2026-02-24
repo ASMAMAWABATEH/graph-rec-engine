@@ -23,6 +23,7 @@ alpha:
 beta:
 gamma:
 edge_time_decay: 0.0
+transition_mix: 0.5
 
 # Preprocessing
 min_session_length: 2

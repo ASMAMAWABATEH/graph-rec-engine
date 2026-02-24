@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from database.build_bulk import build_bulk_from_rows
 from src.evaluation.validator import Validator
@@ -144,6 +145,42 @@ def test_recommender_passes_edge_time_decay_param(monkeypatch):
     try:
         assert driver.params_seen
         assert all(params.get("lambda") == 0.25 for params in driver.params_seen if params)
+    finally:
+        rec.close()
+
+
+def test_recommender_transition_mix_probability_mode(monkeypatch):
+    next_rows = [
+        {"src": 1, "dst": 2, "w": 8.0},
+        {"src": 1, "dst": 3, "w": 2.0},
+    ]
+    driver = DummyNeo4jDriver(next_rows=next_rows, co_rows=[])
+
+    monkeypatch.setattr(recommender_module, "Neo4jDriver", lambda: driver)
+    monkeypatch.setattr(recommender_module.Recommender, "_load_lookup", lambda self: None)
+
+    rec = recommender_module.Recommender(top_k=3, transition_mix=1.0)
+    try:
+        assert rec.next_edges[1][2] == pytest.approx(0.8)
+        assert rec.next_edges[1][3] == pytest.approx(0.2)
+    finally:
+        rec.close()
+
+
+def test_recommender_transition_mix_hybrid_mode(monkeypatch):
+    next_rows = [
+        {"src": 1, "dst": 2, "w": 8.0},
+        {"src": 1, "dst": 3, "w": 2.0},
+    ]
+    driver = DummyNeo4jDriver(next_rows=next_rows, co_rows=[])
+
+    monkeypatch.setattr(recommender_module, "Neo4jDriver", lambda: driver)
+    monkeypatch.setattr(recommender_module.Recommender, "_load_lookup", lambda self: None)
+
+    rec = recommender_module.Recommender(top_k=3, transition_mix=0.5)
+    try:
+        assert rec.next_edges[1][2] == pytest.approx(0.9)
+        assert rec.next_edges[1][3] == pytest.approx(0.225)
     finally:
         rec.close()
 
