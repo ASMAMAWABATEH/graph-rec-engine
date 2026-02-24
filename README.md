@@ -190,7 +190,7 @@ graph-sbr-system/
 │   ├── validate_graph.py  # Post-load graph integrity checks
 │   └── cypher/            # Schema + data loading queries
 ├── experiments/           # Reproducible experiment definitions
-├── scripts/               # Tuning, final evaluation, comparison, and visualization runners
+├── scripts/               # Operational scripts (preflight, tuning, final eval, comparison, viz)
 ├── src/
 │   ├── cli/               # Canonical CLI entrypoints
 │   ├── preprocessing/     # Raw data ingestion, filtering, and temporal splitting
@@ -198,6 +198,7 @@ graph-sbr-system/
 │   ├── evaluation/        # Metrics, validators, and hyperparameter tuning
 │   └── models/            # HSP and RIC model implementations
 ├── tests/                 # Unit and integration tests
+├── preflight_check.py     # Backward-compatible preflight wrapper
 ├── run_pipeline.py        # Backward-compatible pipeline wrapper
 ├── run_inference.py       # Backward-compatible inference wrapper
 ├── Makefile               # Task orchestration for setup, pipeline, eval, and QA

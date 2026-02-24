@@ -21,11 +21,12 @@ PIPELINE_ARGS ?=
 INFER_ARGS ?=
 
 # --- Help Menu ---
-.PHONY: help setup download-raw download-processed prepare-data preprocess build-bulk build-graph pipeline infer evaluate tune final-eval compare-eval experiment-all viz-smoke test clean
+.PHONY: help setup preflight download-raw download-processed prepare-data preprocess build-bulk build-graph pipeline infer evaluate tune final-eval compare-eval experiment-all viz-smoke test clean
 
 help:
 	@echo "Graph-SBR System Command Menu:"
 	@echo "  make setup         - Install dependencies and prepare environment"
+	@echo "  make preflight     - Validate Neo4j connectivity and required env vars"
 	@echo "  make download-raw  - Download RAW_DATA (requires RAW_DATA_URL or pre-existing file)"
 	@echo "  make download-processed - Download PROCESSED_DATA (or generate via preprocess)"
 	@echo "  make prepare-data  - Ensure RAW_DATA + PROCESSED_DATA are available"
@@ -50,6 +51,10 @@ setup:
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
 	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env - please update credentials"; fi
+
+preflight:
+	@echo "🩺 Running Neo4j preflight check..."
+	$(PYTHON) scripts/preflight_check.py
 
 download-raw:
 	@mkdir -p $(dir $(RAW_DATA))
