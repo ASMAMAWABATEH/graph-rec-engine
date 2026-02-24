@@ -6,16 +6,20 @@ A **session-based recommender system** using **Neo4j graph database**. This proj
 
 ## Quick Start
 
-Run the entire pipeline with three commands:
+Recommended bootstrap flow:
 
 ```bash
 # 1) Setup environment and install dependencies
 make setup
 
-# 2) Preprocess data
-make preprocess
+# 2) Verify Neo4j connectivity and env vars
+make preflight
 
-# 3) Build Neo4j graph
+# 3) Ensure raw + processed data exist
+# (provide RAW_DATA_URL if raw file is not already present)
+make prepare-data RAW_DATA_URL=https://.../yoochoose-clicks.dat
+
+# 4) Build Neo4j graph
 make build-graph
 ```
 
@@ -25,7 +29,7 @@ If Neo4j runs outside this repo, pass its import directory so `LOAD CSV` can see
 make build-graph NEO4J_IMPORT_DIR=/path/to/neo4j/import
 ```
 
-After this, you can evaluate models or run tests:
+After graph load, evaluate models or run tests:
 
 ```bash
 make evaluate
@@ -111,69 +115,48 @@ Cleanup temporary files and cache:
 make clean
 ```
 
-Project Phases
-Phase 1: Data Orchestration
+## Workflow Summary
 
-    Preprocessing sessions from raw logs
+1. Validate environment and connectivity:
 
-    Temporal splitting for training and test sets
+```bash
+make setup
+make preflight
+```
 
-make preprocess
+2. Prepare data artifacts:
 
-Outputs processed session files into data/processed/.
-Phase 2: Graph Construction
+```bash
+# Option A: if RAW_DATA already exists locally
+make prepare-data
 
-    Generate Neo4j Bulk CSVs:
+# Option B: download RAW_DATA, then auto-generate PROCESSED_DATA
+make prepare-data RAW_DATA_URL=https://.../yoochoose-clicks.dat
 
+# Option C: directly download both files
+make download-raw RAW_DATA_URL=https://.../yoochoose-clicks.dat
+make download-processed PROCESSED_DATA_URL=https://.../yoochoose_sessions.parquet
+```
+
+3. Build graph artifacts and load Neo4j:
+
+```bash
 make build-bulk
-
-Output folder: data/neo4j_import/ containing:
-
-    items.csv
-
-    sessions.csv
-
-    next_typed.csv
-
-    contains_typed.csv
-
-    cooccurs_typed.csv
-
-    lookup.json
-
-    Load Graph into Neo4j:
-
 make build-graph
+```
 
-This will:
+4. Run evaluation and quality checks:
 
-    Apply schema constraints and indexes (database/cypher/schema.cypher)
-
-    Load nodes and relationships from bulk CSVs
-
-    Optionally build CO_OCCURS relationships (database/cypher/cooccurs.cypher)
-
-    Note: build-graph depends on build-bulk.
-
-Phase 3 & 4: Evaluation
-
-Evaluate recommendation models (HSP, RIC):
-
+```bash
 make evaluate
-
-Metrics include Recall@K and MRR@K.
-Testing
-
-Run quality assurance tests:
-
 make test
+```
 
-Uses pytest on the tests/ folder.
-Cleanup
+5. Clean generated local artifacts:
 
-Remove temporary files, CSVs, and Python cache:
-
+```bash
 make clean
+```
 
 ## Project Structure
 
@@ -198,7 +181,6 @@ graph-sbr-system/
 │   ├── evaluation/        # Metrics, validators, and hyperparameter tuning
 │   └── models/            # HSP and RIC model implementations
 ├── tests/                 # Unit and integration tests
-├── preflight_check.py     # Backward-compatible preflight wrapper
 ├── run_pipeline.py        # Backward-compatible pipeline wrapper
 ├── run_inference.py       # Backward-compatible inference wrapper
 ├── Makefile               # Task orchestration for setup, pipeline, eval, and QA
