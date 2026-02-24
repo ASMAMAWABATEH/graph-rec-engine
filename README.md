@@ -175,23 +175,31 @@ Remove temporary files, CSVs, and Python cache:
 
 make clean
 
-Folder Structure (Key Directories)
+## Project Structure
 
+```text
 graph-sbr-system/
-├─ data/
-│  ├─ raw/                 # Raw session data
-│  ├─ processed/           # Preprocessed session files
-│  └─ neo4j_import/        # Neo4j bulk CSV outputs
-├─ database/
-│  ├─ build_bulk.py        # Generates bulk CSVs
-│  └─ cypher/              # Neo4j Cypher scripts
-├─ src/
-│  ├─ cli/                 # Canonical CLI entrypoints
-│  ├─ preprocessing/       # Data preparation modules
-│  ├─ inference/           # Recommendation logic
-│  └─ evaluation/          # Metrics and validation
-├─ tests/                   # Test suite
-├─ run_pipeline.py          # Backward-compatible wrapper
-├─ run_inference.py         # Backward-compatible wrapper
-├─ Makefile                 # Orchestrates phases
-└─ README.md
+├── configs/               # YAML configs for pipeline, inference, models, and evaluation
+├── data/
+│   ├── raw/               # Source Yoochoose files
+│   ├── processed/         # Sessionized/split parquet artifacts
+│   └── neo4j_import/      # Typed TSV/CSV files for Neo4j LOAD CSV
+├── database/
+│   ├── build_bulk.py      # Build import artifacts from training sessions
+│   ├── load_graph.py      # Stage files and execute Cypher loaders
+│   ├── validate_graph.py  # Post-load graph integrity checks
+│   └── cypher/            # Schema + data loading queries
+├── experiments/           # Reproducible experiment definitions
+├── scripts/               # Tuning, final evaluation, comparison, and visualization runners
+├── src/
+│   ├── cli/               # Canonical CLI entrypoints
+│   ├── preprocessing/     # Raw data ingestion, filtering, and temporal splitting
+│   ├── inference/         # Recommender orchestration and cold-start logic
+│   ├── evaluation/        # Metrics, validators, and hyperparameter tuning
+│   └── models/            # HSP and RIC model implementations
+├── tests/                 # Unit and integration tests
+├── run_pipeline.py        # Backward-compatible pipeline wrapper
+├── run_inference.py       # Backward-compatible inference wrapper
+├── Makefile               # Task orchestration for setup, pipeline, eval, and QA
+└── README.md
+```

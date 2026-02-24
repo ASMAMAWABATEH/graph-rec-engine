@@ -6,6 +6,8 @@ PYTHON := .venv/bin/python3
 PIP := .venv/bin/pip
 RAW_DATA := data/raw/yoochoose-clicks.dat
 PROCESSED_DATA := data/processed/yoochoose_sessions.parquet
+RAW_DATA_URL ?=
+PROCESSED_DATA_URL ?=
 NEO4J_IMPORT := data/neo4j_import
 NEO4J_IMPORT_DIR ?=
 EXPERIMENT ?= experiments/hsp_vs_ric.yaml
@@ -19,11 +21,14 @@ PIPELINE_ARGS ?=
 INFER_ARGS ?=
 
 # --- Help Menu ---
-.PHONY: help setup preprocess build-bulk build-graph pipeline infer evaluate tune final-eval compare-eval experiment-all viz-smoke test clean
+.PHONY: help setup download-raw download-processed prepare-data preprocess build-bulk build-graph pipeline infer evaluate tune final-eval compare-eval experiment-all viz-smoke test clean
 
 help:
 	@echo "Graph-SBR System Command Menu:"
 	@echo "  make setup         - Install dependencies and prepare environment"
+	@echo "  make download-raw  - Download RAW_DATA (requires RAW_DATA_URL or pre-existing file)"
+	@echo "  make download-processed - Download PROCESSED_DATA (or generate via preprocess)"
+	@echo "  make prepare-data  - Ensure RAW_DATA + PROCESSED_DATA are available"
 	@echo "  make preprocess    - Run sessionization and temporal splitting"
 	@echo "  make build-bulk    - Generate Neo4j bulk CSVs from batch.json"
 	@echo "  make build-graph   - Initialize Neo4j schema and load training data"
@@ -45,6 +50,34 @@ setup:
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
 	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env - please update credentials"; fi
+
+download-raw:
+	@mkdir -p $(dir $(RAW_DATA))
+	@if [ -f "$(RAW_DATA)" ]; then \
+		echo "📥 RAW data already present: $(RAW_DATA)"; \
+	elif [ -n "$(RAW_DATA_URL)" ]; then \
+		echo "⬇️ Downloading RAW data from $(RAW_DATA_URL)"; \
+		curl -fL "$(RAW_DATA_URL)" -o "$(RAW_DATA)"; \
+	else \
+		echo "❌ RAW data not found at $(RAW_DATA) and RAW_DATA_URL is empty."; \
+		echo "   Example: make download-raw RAW_DATA_URL=https://.../yoochoose-clicks.dat"; \
+		exit 1; \
+	fi
+
+download-processed: download-raw
+	@mkdir -p $(dir $(PROCESSED_DATA))
+	@if [ -f "$(PROCESSED_DATA)" ]; then \
+		echo "📥 Processed data already present: $(PROCESSED_DATA)"; \
+	elif [ -n "$(PROCESSED_DATA_URL)" ]; then \
+		echo "⬇️ Downloading processed data from $(PROCESSED_DATA_URL)"; \
+		curl -fL "$(PROCESSED_DATA_URL)" -o "$(PROCESSED_DATA)"; \
+	else \
+		echo "⚙️ PROCESSED_DATA_URL not set; generating $(PROCESSED_DATA) via preprocess."; \
+		$(MAKE) preprocess; \
+	fi
+
+prepare-data: download-processed
+	@echo "✅ Data ready: $(RAW_DATA) and $(PROCESSED_DATA)"
 
 # --- Phase 1: Data Orchestration ---
 preprocess:
